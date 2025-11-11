@@ -22,25 +22,19 @@ const Admin = () => {
     setLoading(true);
 
     try {
-      // Create auth user
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: { full_name: fullName }
+      // Get current session token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Bạn cần đăng nhập để thực hiện thao tác này');
+      }
+
+      // Call Edge Function to create user
+      const { data, error } = await supabase.functions.invoke('admin-create-user', {
+        body: { email, password, full_name: fullName, role }
       });
 
-      if (authError) throw authError;
-
-      // Assign role
-      if (authData.user) {
-        const { error: roleError } = await supabase
-          .from('user_roles')
-          .update({ role })
-          .eq('user_id', authData.user.id);
-
-        if (roleError) throw roleError;
-      }
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
       toast.success(`Đã tạo tài khoản ${email} với quyền ${role}`);
       setEmail('');
@@ -48,6 +42,7 @@ const Admin = () => {
       setPassword('');
       setRole('student');
     } catch (error: any) {
+      console.error('Create user error:', error);
       toast.error(error.message || 'Lỗi khi tạo người dùng');
     } finally {
       setLoading(false);
