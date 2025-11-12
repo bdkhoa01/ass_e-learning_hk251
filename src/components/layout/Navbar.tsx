@@ -27,8 +27,9 @@ export const Navbar = ({ darkMode, toggleDarkMode }: NavbarProps) => {
   const navItems = [
     { path: '/', label: 'Trang chủ', roles: ['admin', 'lecturer', 'student'] },
     { path: '/dashboard', label: 'Bảng điều khiển', roles: ['admin', 'lecturer', 'student'] },
-    { path: '/courses', label: 'Khóa học', roles: ['lecturer', 'student'] },
-    { path: '/admin', label: 'Quản lý', roles: ['admin'] },
+    { path: '/courses', label: 'Khóa học', roles: ['admin', 'lecturer', 'student'] },
+    { path: '/users', label: 'Người dùng', roles: ['admin'] },
+    { path: '/admin', label: 'Tạo tài khoản', roles: ['admin'] },
   ];
 
   const filteredNavItems = navItems.filter(item => 

@@ -11,6 +11,9 @@ import Home from "./pages/Home";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Admin from "./pages/Admin";
+import Courses from "./pages/Courses";
+import Users from "./pages/Users";
+import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -69,6 +72,36 @@ const App = () => {
                   <ProtectedRoute allowedRoles={['admin']}>
                     <Layout darkMode={darkMode} toggleDarkMode={() => setDarkMode(!darkMode)}>
                       <Admin />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/courses"
+                element={
+                  <ProtectedRoute>
+                    <Layout darkMode={darkMode} toggleDarkMode={() => setDarkMode(!darkMode)}>
+                      <Courses />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/users"
+                element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <Layout darkMode={darkMode} toggleDarkMode={() => setDarkMode(!darkMode)}>
+                      <Users />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/profile"
+                element={
+                  <ProtectedRoute>
+                    <Layout darkMode={darkMode} toggleDarkMode={() => setDarkMode(!darkMode)}>
+                      <Profile />
                     </Layout>
                   </ProtectedRoute>
                 }
