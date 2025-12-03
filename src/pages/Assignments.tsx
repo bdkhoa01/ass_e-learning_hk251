@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { FileText, PlusCircle, Clock, CheckCircle, Calendar, Edit, Trash2 } from 'lucide-react';
+import { FileText, PlusCircle, Clock, CheckCircle, Calendar, Edit, Trash2, BookOpen } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface Assignment {
@@ -22,8 +22,17 @@ interface Assignment {
   max_score: number;
   created_at: string;
   course_name?: string;
+  course_code?: string;
   submission_status?: 'submitted' | 'graded' | 'pending';
   score?: number;
+}
+
+interface GroupedAssignments {
+  [courseId: string]: {
+    course_name: string;
+    course_code: string;
+    assignments: Assignment[];
+  };
 }
 
 const Assignments = () => {
@@ -47,50 +56,61 @@ const Assignments = () => {
 
   const fetchData = async () => {
     try {
-      // Fetch courses first
       let coursesQuery = supabase.from('courses').select('*');
+      let courseIds: string[] = [];
       
       if (role === 'lecturer') {
         coursesQuery = coursesQuery.eq('lecturer_id', user?.id);
+        const { data: coursesData } = await coursesQuery;
+        setCourses(coursesData || []);
+        courseIds = coursesData?.map(c => c.id) || [];
       } else if (role === 'student') {
+        // Only get enrollments with approved status
         const { data: enrollments } = await supabase
           .from('enrollments')
           .select('course_id')
-          .eq('student_id', user?.id);
-        const courseIds = enrollments?.map(e => e.course_id) || [];
+          .eq('student_id', user?.id)
+          .eq('status', 'approved');
+        
+        courseIds = enrollments?.map(e => e.course_id) || [];
+        
         if (courseIds.length > 0) {
-          coursesQuery = coursesQuery.in('id', courseIds);
+          const { data: coursesData } = await supabase
+            .from('courses')
+            .select('*')
+            .in('id', courseIds);
+          setCourses(coursesData || []);
+        } else {
+          setCourses([]);
         }
+      } else if (role === 'admin') {
+        const { data: coursesData } = await coursesQuery;
+        setCourses(coursesData || []);
+        courseIds = coursesData?.map(c => c.id) || [];
       }
 
-      const { data: coursesData } = await coursesQuery;
-      setCourses(coursesData || []);
+      // Fetch assignments only if there are courses
+      if (courseIds.length === 0) {
+        setAssignments([]);
+        setLoading(false);
+        return;
+      }
 
-      // Fetch assignments
-      let assignmentsQuery = supabase
+      const { data: assignmentsData, error } = await supabase
         .from('assignments')
         .select('*')
+        .in('course_id', courseIds)
         .order('due_date', { ascending: true });
 
-      if (role === 'student') {
-        const courseIds = coursesData?.map(c => c.id) || [];
-        if (courseIds.length > 0) {
-          assignmentsQuery = assignmentsQuery.in('course_id', courseIds);
-        }
-      } else if (role === 'lecturer') {
-        const courseIds = coursesData?.map(c => c.id) || [];
-        if (courseIds.length > 0) {
-          assignmentsQuery = assignmentsQuery.in('course_id', courseIds);
-        }
-      }
-
-      const { data: assignmentsData, error } = await assignmentsQuery;
       if (error) throw error;
+
+      // Get courses for reference
+      const coursesForRef = courses.length > 0 ? courses : (await supabase.from('courses').select('*').in('id', courseIds)).data || [];
 
       // Add course names and submission status
       const assignmentsWithDetails = await Promise.all(
         (assignmentsData || []).map(async (assignment) => {
-          const course = coursesData?.find(c => c.id === assignment.course_id);
+          const course = coursesForRef.find(c => c.id === assignment.course_id);
           
           let submissionStatus = 'pending';
           let score = undefined;
@@ -112,6 +132,7 @@ const Assignments = () => {
           return {
             ...assignment,
             course_name: course?.name,
+            course_code: course?.code,
             submission_status: submissionStatus as any,
             score
           };
@@ -223,6 +244,20 @@ const Assignments = () => {
         );
     }
   };
+
+  // Group assignments by course
+  const groupedAssignments: GroupedAssignments = assignments.reduce((acc, assignment) => {
+    const courseId = assignment.course_id;
+    if (!acc[courseId]) {
+      acc[courseId] = {
+        course_name: assignment.course_name || 'Không xác định',
+        course_code: assignment.course_code || '',
+        assignments: []
+      };
+    }
+    acc[courseId].assignments.push(assignment);
+    return acc;
+  }, {} as GroupedAssignments);
 
   if (loading) {
     return (
@@ -337,69 +372,97 @@ const Assignments = () => {
         </div>
       </motion.div>
 
-      {assignments.length === 0 ? (
+      {Object.keys(groupedAssignments).length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <FileText className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-muted-foreground">Chưa có bài tập nào</p>
+            <p className="text-muted-foreground">
+              {role === 'student' 
+                ? 'Chưa có bài tập nào từ các khóa học đã được duyệt' 
+                : 'Chưa có bài tập nào'}
+            </p>
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4">
-          {assignments.map((assignment, index) => (
+        <div className="space-y-8">
+          {Object.entries(groupedAssignments).map(([courseId, group], groupIndex) => (
             <motion.div
-              key={assignment.id}
+              key={courseId}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.05 }}
+              transition={{ delay: groupIndex * 0.1 }}
             >
-              <Card className="shadow-card hover:shadow-hover transition-shadow">
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <CardTitle className="text-xl mb-2">{assignment.title}</CardTitle>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span className="font-medium text-primary">{assignment.course_name}</span>
-                        {assignment.due_date && (
-                          <div className="flex items-center gap-1">
-                            <Calendar className="h-4 w-4" />
-                            <span>Hạn: {format(new Date(assignment.due_date), 'dd/MM/yyyy')}</span>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <BookOpen className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-foreground">
+                    {group.course_code} - {group.course_name}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    {group.assignments.length} bài tập
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 pl-4 border-l-2 border-primary/20">
+                {group.assignments.map((assignment, index) => (
+                  <motion.div
+                    key={assignment.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                  >
+                    <Card className="shadow-card hover:shadow-hover transition-shadow">
+                      <CardHeader>
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <CardTitle className="text-lg mb-2">{assignment.title}</CardTitle>
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              {assignment.due_date && (
+                                <div className="flex items-center gap-1">
+                                  <Calendar className="h-4 w-4" />
+                                  <span>Hạn: {format(new Date(assignment.due_date), 'dd/MM/yyyy')}</span>
+                                </div>
+                              )}
+                              <span>Điểm: {assignment.max_score}</span>
+                            </div>
                           </div>
-                        )}
-                        <span>Điểm: {assignment.max_score}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {getStatusBadge(assignment)}
-                      {(role === 'admin' || role === 'lecturer') && (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => openEditDialog(assignment)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDelete(assignment.id)}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </>
+                          <div className="flex items-center gap-2">
+                            {getStatusBadge(assignment)}
+                            {(role === 'admin' || role === 'lecturer') && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => openEditDialog(assignment)}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleDelete(assignment.id)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </CardHeader>
+                      {assignment.description && (
+                        <CardContent>
+                          <p className="text-muted-foreground whitespace-pre-wrap">
+                            {assignment.description}
+                          </p>
+                        </CardContent>
                       )}
-                    </div>
-                  </div>
-                </CardHeader>
-                {assignment.description && (
-                  <CardContent>
-                    <p className="text-muted-foreground whitespace-pre-wrap">
-                      {assignment.description}
-                    </p>
-                  </CardContent>
-                )}
-              </Card>
+                    </Card>
+                  </motion.div>
+                ))}
+              </div>
             </motion.div>
           ))}
         </div>
