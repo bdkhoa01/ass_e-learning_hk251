@@ -507,7 +507,7 @@ const Assignments = () => {
                           </p>
                         )}
                         {(role === 'admin' || role === 'lecturer') && (
-                          <SubmissionsList assignmentId={assignment.id} />
+                          <SubmissionsList assignmentId={assignment.id} maxScore={assignment.max_score} />
                         )}
                       </CardContent>
                     </Card>
