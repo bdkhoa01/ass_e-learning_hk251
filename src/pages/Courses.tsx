@@ -201,6 +201,25 @@ const Courses = () => {
     }
   };
 
+  const handleWithdraw = async (courseId: string) => {
+    if (!user?.id) return;
+    if (!confirm('Bạn có chắc muốn rút khỏi khóa học này? Yêu cầu sẽ cần được giảng viên duyệt.')) return;
+
+    try {
+      const { error } = await supabase
+        .from('enrollments')
+        .update({ status: 'withdrawal_pending' })
+        .eq('course_id', courseId)
+        .eq('student_id', user.id);
+
+      if (error) throw error;
+      toast.success('Yêu cầu rút môn đã được gửi. Vui lòng chờ giảng viên duyệt.');
+      fetchCourses();
+    } catch (error: any) {
+      toast.error(error.message || 'Không thể gửi yêu cầu rút môn');
+    }
+  };
+
   const openEditDialog = (course: Course) => {
     setEditingCourse(course);
     setFormData({
@@ -429,9 +448,17 @@ const Courses = () => {
                                 ? 'bg-green-100 text-green-700' 
                                 : enrollmentStatus === 'pending'
                                   ? 'bg-yellow-100 text-yellow-700'
-                                  : 'bg-red-100 text-red-700'
+                                  : enrollmentStatus === 'withdrawal_pending'
+                                    ? 'bg-orange-100 text-orange-700'
+                                    : 'bg-red-100 text-red-700'
                             }`}>
-                              {enrollmentStatus === 'approved' ? 'Đã được duyệt' : enrollmentStatus === 'pending' ? 'Chờ duyệt' : 'Bị từ chối'}
+                              {enrollmentStatus === 'approved' 
+                                ? 'Đã được duyệt' 
+                                : enrollmentStatus === 'pending' 
+                                  ? 'Chờ duyệt' 
+                                  : enrollmentStatus === 'withdrawal_pending'
+                                    ? 'Chờ duyệt rút môn'
+                                    : 'Bị từ chối'}
                             </div>
                             <div className="flex gap-2 mt-4">
                               <Link to={`/courses/${course.id}`} className="flex-1">
@@ -440,6 +467,15 @@ const Courses = () => {
                                   Xem chi tiết
                                 </Button>
                               </Link>
+                              {enrollmentStatus === 'approved' && (
+                                <Button 
+                                  variant="destructive" 
+                                  size="sm"
+                                  onClick={() => handleWithdraw(course.id)}
+                                >
+                                  Rút môn
+                                </Button>
+                              )}
                             </div>
                           </CardContent>
                         </Card>
