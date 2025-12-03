@@ -53,19 +53,8 @@ const Courses = () => {
     try {
       let query = supabase
         .from('courses')
-        .select('*');
-
-      if (role === 'lecturer') {
-        query = query.eq('lecturer_id', user?.id);
-      } else if (role === 'student') {
-        query = query.eq('status', 'approved');
-      }
-
-      if (role === 'admin') {
-        // no status filter
-      } else if (role !== 'lecturer') {
-        query = query.eq('status', 'approved');
-      }
+        .select('*')
+        .eq('status', 'approved'); // Tất cả vai trò chỉ thấy khóa học đã duyệt
 
       const { data: coursesData, error } = await query.order('created_at', { ascending: false });
 
