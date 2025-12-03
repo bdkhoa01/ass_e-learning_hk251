@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { UserPlus, Users, Trash2, BookOpen, Check, X, Clock } from 'lucide-react';
+import { UserPlus, Users, Trash2, BookOpen, Check, X, Clock, LogOut } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface Enrollment {
@@ -31,6 +31,7 @@ interface CourseGroup {
   pending: Enrollment[];
   approved: Enrollment[];
   rejected: Enrollment[];
+  withdrawal_pending: Enrollment[];
 }
 
 const Enrollments = () => {
@@ -130,7 +131,8 @@ const Enrollments = () => {
             course_code: enrollment.course_code || '',
             pending: [],
             approved: [],
-            rejected: []
+            rejected: [],
+            withdrawal_pending: []
           });
         }
         
@@ -139,6 +141,8 @@ const Enrollments = () => {
           group.pending.push(enrollment);
         } else if (enrollment.status === 'approved') {
           group.approved.push(enrollment);
+        } else if (enrollment.status === 'withdrawal_pending') {
+          group.withdrawal_pending.push(enrollment);
         } else {
           group.rejected.push(enrollment);
         }
@@ -234,6 +238,36 @@ const Enrollments = () => {
 
       if (error) throw error;
       toast.success('Hủy ghi danh thành công');
+      fetchData();
+    } catch (error: any) {
+      toast.error(error.message || 'Có lỗi xảy ra');
+    }
+  };
+
+  const handleApproveWithdrawal = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('enrollments')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      toast.success('Đã duyệt rút môn - Sinh viên đã được xóa khỏi khóa học');
+      fetchData();
+    } catch (error: any) {
+      toast.error(error.message || 'Có lỗi xảy ra');
+    }
+  };
+
+  const handleRejectWithdrawal = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('enrollments')
+        .update({ status: 'approved' })
+        .eq('id', id);
+
+      if (error) throw error;
+      toast.success('Đã từ chối yêu cầu rút môn - Sinh viên vẫn còn trong khóa học');
       fetchData();
     } catch (error: any) {
       toast.error(error.message || 'Có lỗi xảy ra');
@@ -382,7 +416,7 @@ const Enrollments = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     {/* Pending */}
                     <div className="space-y-2">
                       <div className="flex items-center gap-2 mb-3">
@@ -412,6 +446,39 @@ const Enrollments = () => {
                         <div className="space-y-2">
                           {group.approved.map((e) => (
                             <EnrollmentCard key={e.id} enrollment={e} showActions={false} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Withdrawal Pending */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 mb-3">
+                        <LogOut className="h-4 w-4 text-orange-600" />
+                        <h4 className="font-medium text-sm">Chờ duyệt rút môn ({group.withdrawal_pending.length})</h4>
+                      </div>
+                      {group.withdrawal_pending.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">Không có</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {group.withdrawal_pending.map((e) => (
+                            <div key={e.id} className="flex items-center justify-between p-3 bg-orange-50 dark:bg-orange-950/30 rounded-lg border border-orange-200 dark:border-orange-900">
+                              <div className="flex-1">
+                                <p className="font-medium text-sm">{e.student_name}</p>
+                                <p className="text-xs text-muted-foreground">{e.student_email}</p>
+                                <p className="text-xs text-orange-600">Yêu cầu rút môn</p>
+                              </div>
+                              {(role === 'lecturer' || role === 'admin') && (
+                                <div className="flex items-center gap-1">
+                                  <Button size="icon" variant="ghost" onClick={() => handleApproveWithdrawal(e.id)} title="Duyệt rút môn">
+                                    <Check className="h-4 w-4 text-green-600" />
+                                  </Button>
+                                  <Button size="icon" variant="ghost" onClick={() => handleRejectWithdrawal(e.id)} title="Từ chối rút môn">
+                                    <X className="h-4 w-4 text-red-600" />
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
                           ))}
                         </div>
                       )}
