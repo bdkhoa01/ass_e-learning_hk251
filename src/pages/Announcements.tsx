@@ -24,7 +24,10 @@ interface Announcement {
   created_at: string;
   course_name?: string;
   author_name?: string;
+  status?: string;
 }
+
+const STATUS_COLUMN_ERROR = "'status' column";
 
 const Announcements = () => {
   const { role, user } = useAuth();
@@ -33,6 +36,7 @@ const Announcements = () => {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
+  const [supportsStatus, setSupportsStatus] = useState(true);
   const [formData, setFormData] = useState({
     title: '',
     content: '',
@@ -65,13 +69,8 @@ const Announcements = () => {
       const { data: coursesData } = await coursesQuery;
       setCourses(coursesData || []);
 
-      // Fetch announcements - everyone can see global announcements
-      const { data: announcementsData, error } = await supabase
-        .from('announcements')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      // Fetch announcements
+      const announcementsData = await fetchAnnouncements();
 
       // Filter announcements based on role
       let filteredAnnouncements = announcementsData || [];
@@ -79,13 +78,19 @@ const Announcements = () => {
       if (role === 'student') {
         const courseIds = coursesData?.map(c => c.id) || [];
         filteredAnnouncements = filteredAnnouncements.filter(
-          a => a.is_global || (a.course_id && courseIds.includes(a.course_id))
+          (supportsStatus ? a.status === 'approved' : true) &&
+          (a.is_global || (a.course_id && courseIds.includes(a.course_id)))
         );
       } else if (role === 'lecturer') {
         const courseIds = coursesData?.map(c => c.id) || [];
-        filteredAnnouncements = filteredAnnouncements.filter(
-          a => a.is_global || a.created_by === user?.id || (a.course_id && courseIds.includes(a.course_id))
+        filteredAnnouncements = filteredAnnouncements.filter((a) =>
+          a.is_global
+            ? supportsStatus ? a.status === 'approved' : true
+            : (a.course_id && courseIds.includes(a.course_id)) || a.created_by === user?.id
         );
+      } else {
+        // admin sees all
+        filteredAnnouncements = announcementsData || [];
       }
 
       // Add course and author names
@@ -116,32 +121,64 @@ const Announcements = () => {
     }
   };
 
+  const fetchAnnouncements = async () => {
+    const { data, error } = await supabase
+      .from('announcements')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      if (error.message?.includes(STATUS_COLUMN_ERROR)) {
+        setSupportsStatus(false);
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('announcements')
+          .select('id, title, content, course_id, is_global, created_by, created_at')
+          .order('created_at', { ascending: false });
+        if (fallbackError) throw fallbackError;
+        return fallbackData || [];
+      }
+      throw error;
+    }
+
+    if (!supportsStatus) setSupportsStatus(true);
+    return data || [];
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     try {
-      const dataToSubmit = {
+      const payloadBase = {
         ...formData,
         course_id: formData.is_global ? null : formData.course_id || null,
-        created_by: user?.id
+        created_by: user?.id,
       };
 
-      if (editingAnnouncement) {
-        const { error } = await supabase
-          .from('announcements')
-          .update(dataToSubmit)
-          .eq('id', editingAnnouncement.id);
+      const buildPayload = () => {
+        if (!supportsStatus) return payloadBase;
+        return {
+          ...payloadBase,
+          status: formData.is_global && role !== 'admin' ? 'pending' : 'approved',
+        };
+      };
 
-        if (error) throw error;
-        toast.success('Cập nhật thông báo thành công');
-      } else {
-        const { error } = await supabase
-          .from('announcements')
-          .insert([dataToSubmit]);
+      const mutate = async (payload: typeof payloadBase & { status?: string }) => {
+        if (editingAnnouncement) {
+          return supabase.from('announcements').update(payload).eq('id', editingAnnouncement.id);
+        }
+        return supabase.from('announcements').insert([payload]);
+      };
 
-        if (error) throw error;
-        toast.success('Tạo thông báo thành công');
+      let result = await mutate(buildPayload());
+
+      if (result.error && result.error.message?.includes(STATUS_COLUMN_ERROR)) {
+        setSupportsStatus(false);
+        result = await mutate(payloadBase);
       }
+
+      if (result.error) throw result.error;
+
+      toast.success(editingAnnouncement ? 'Cập nhật thông báo thành công' : 'Tạo thông báo thành công');
 
       setOpen(false);
       setEditingAnnouncement(null);
@@ -251,16 +288,23 @@ const Announcements = () => {
                       required
                     />
                   </div>
-                  {role === 'admin' && (
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        id="is_global"
-                        checked={formData.is_global}
-                        onCheckedChange={(checked) => setFormData({ ...formData, is_global: checked })}
-                      />
-                      <Label htmlFor="is_global" className="cursor-pointer">
-                        Thông báo toàn trường
-                      </Label>
+                  {(role === 'admin' || role === 'lecturer') && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          id="is_global"
+                          checked={formData.is_global}
+                          onCheckedChange={(checked) => setFormData({ ...formData, is_global: checked })}
+                        />
+                        <Label htmlFor="is_global" className="cursor-pointer">
+                          Thông báo toàn trường
+                        </Label>
+                      </div>
+                      {role === 'lecturer' && (
+                        <p className="text-xs text-muted-foreground">
+                          Thông báo toàn trường cần được admin duyệt thủ công.
+                        </p>
+                      )}
                     </div>
                   )}
                   {!formData.is_global && (
@@ -316,12 +360,20 @@ const Announcements = () => {
             >
               <Card className="shadow-card hover:shadow-hover transition-shadow">
                 <CardHeader>
-                  <div className="flex items-start justify-between">
+                  <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-2 flex-wrap mb-2">
                         <CardTitle className="text-xl">{announcement.title}</CardTitle>
                         {announcement.is_global && (
-                          <Globe className="h-5 w-5 text-primary" />
+                          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs">
+                            <Globe className="h-4 w-4" />
+                            Toàn trường
+                          </span>
+                        )}
+                        {announcement.status && announcement.status !== 'approved' && (
+                          <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                            {announcement.status === 'pending' ? 'Chờ duyệt' : 'Đã từ chối'}
+                          </span>
                         )}
                       </div>
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">

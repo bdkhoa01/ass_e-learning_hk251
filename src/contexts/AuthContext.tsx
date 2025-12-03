@@ -25,7 +25,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   updateProfile: (data: Partial<Profile>) => Promise<void>;
-  changePassword: (newPassword: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -120,19 +120,30 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signOut = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
+      // Try global sign out first, fallback to default
+      let { error } = await supabase.auth.signOut({ scope: 'global' as any });
+      if (error) {
+        const fallback = await supabase.auth.signOut();
+        error = fallback.error;
+      }
       if (error) throw error;
-      
+
       setUser(null);
       setSession(null);
       setProfile(null);
       setRole(null);
-      
+
       toast.success('Đã đăng xuất thành công');
       navigate('/auth');
     } catch (error: any) {
       console.error('Sign out error:', error);
-      toast.error('Lỗi khi đăng xuất');
+      // Dù lỗi, vẫn dọn state để tránh kẹt phiên
+      setUser(null);
+      setSession(null);
+      setProfile(null);
+      setRole(null);
+      navigate('/auth');
+      toast.error(error.message || 'Lỗi khi đăng xuất');
     }
   };
 
@@ -156,8 +167,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const changePassword = async (newPassword: string) => {
+  const changePassword = async (currentPassword: string, newPassword: string) => {
     try {
+      if (!user?.email) {
+        throw new Error('Không tìm thấy email người dùng');
+      }
+
+      // Re-authenticate with current password
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword
+      });
+
+      if (authError) throw authError;
+
       const { error } = await supabase.auth.updateUser({
         password: newPassword
       });

@@ -1,10 +1,99 @@
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Users, BookOpen, FileText, Settings, TrendingUp, UserPlus } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { Link } from 'react-router-dom';
+import { BookOpen, FileText, Bell, Users } from 'lucide-react';
+import type { Database } from '@/integrations/supabase/types';
+
+interface Stats {
+  courses: number;
+  assignments: number;
+  announcements: number;
+  users: number;
+}
 
 export const AdminDashboard = () => {
+  const [stats, setStats] = useState<Stats>({
+    courses: 0,
+    assignments: 0,
+    announcements: 0,
+    users: 0,
+  });
+  const [loading, setLoading] = useState(true);
+  const [pendingCourses, setPendingCourses] = useState<any[]>([]);
+  const [pendingAnnouncements, setPendingAnnouncements] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchCounts = async () => {
+      type TableName = 'courses' | 'assignments' | 'announcements' | 'profiles';
+      const getCount = async (table: TableName) => {
+        const { count, error } = await supabase
+          .from(table)
+          .select('id', { count: 'exact', head: true });
+        if (error) throw error;
+        return count || 0;
+      };
+
+      try {
+        const [courses, assignments, announcements, users] = await Promise.all([
+          getCount('courses'),
+          getCount('assignments'),
+          getCount('announcements'),
+          getCount('profiles'),
+        ]);
+
+        setStats({ courses, assignments, announcements, users });
+
+        const { data: coursesPending } = await supabase
+          .from('courses')
+          .select('id, code, name, lecturer_id, status')
+          .eq('status', 'pending');
+        setPendingCourses(coursesPending || []);
+
+        const { data: announcementsPending } = await supabase
+          .from('announcements')
+          .select('id, title, created_by, status, is_global')
+          .eq('status', 'pending')
+          .eq('is_global', true);
+        setPendingAnnouncements(announcementsPending || []);
+      } catch (err) {
+        console.error('Error fetching admin stats:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCounts();
+  }, []);
+
+  const cards = [
+    {
+      title: 'Khóa học',
+      value: stats.courses,
+      icon: <BookOpen className="h-5 w-5 text-primary" />,
+      to: '/courses',
+    },
+    {
+      title: 'Bài tập',
+      value: stats.assignments,
+      icon: <FileText className="h-5 w-5 text-success" />,
+      to: '/assignments',
+    },
+    {
+      title: 'Thông báo',
+      value: stats.announcements,
+      icon: <Bell className="h-5 w-5 text-warning" />,
+      to: '/announcements',
+    },
+    {
+      title: 'Người dùng',
+      value: stats.users,
+      icon: <Users className="h-5 w-5 text-destructive" />,
+      to: '/users',
+    },
+  ];
+
   return (
     <div className="container py-8 px-4">
       <motion.div
@@ -16,191 +105,136 @@ export const AdminDashboard = () => {
         <p className="text-muted-foreground">Quản lý toàn bộ hệ thống</p>
       </motion.div>
 
-      {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
-          <Card className="shadow-card hover:shadow-hover transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Tổng Sinh viên
-              </CardTitle>
-              <Users className="h-4 w-4 text-primary" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">5,234</div>
-              <p className="text-xs text-success">+12% từ tháng trước</p>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <Card className="shadow-card hover:shadow-hover transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Giảng viên
-              </CardTitle>
-              <Users className="h-4 w-4 text-success" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">342</div>
-              <p className="text-xs text-success">+5% từ tháng trước</p>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
-          <Card className="shadow-card hover:shadow-hover transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Khóa học
-              </CardTitle>
-              <BookOpen className="h-4 w-4 text-warning" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">156</div>
-              <p className="text-xs text-muted-foreground">Đang hoạt động</p>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-        >
-          <Card className="shadow-card hover:shadow-hover transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Tỷ lệ hoạt động
-              </CardTitle>
-              <TrendingUp className="h-4 w-4 text-destructive" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">94.2%</div>
-              <p className="text-xs text-success">+2.1% từ tuần trước</p>
-            </CardContent>
-          </Card>
-        </motion.div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {cards.map((card, index) => (
+          <motion.div
+            key={card.title}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 * (index + 1) }}
+          >
+            <Link to={card.to}>
+              <Card className="shadow-card hover:shadow-hover transition-shadow">
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    {card.title}
+                  </CardTitle>
+                  {card.icon}
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-foreground">
+                    {loading ? '...' : card.value}
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          </motion.div>
+        ))}
       </div>
 
-      {/* Quick Actions */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
-        className="mb-8"
-      >
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
         <Card className="shadow-card">
           <CardHeader>
-            <CardTitle>Quản lý Nhanh</CardTitle>
+            <CardTitle>Khóa học chờ duyệt</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Link to="/admin/users">
-                <Button className="w-full h-20 flex flex-col gap-2" variant="outline">
-                  <UserPlus className="h-6 w-6" />
-                  <span>Quản lý Người dùng</span>
-                </Button>
-              </Link>
-
-              <Link to="/admin/approvals">
-                <Button className="w-full h-20 flex flex-col gap-2" variant="outline">
-                  <BookOpen className="h-6 w-6" />
-                  <span>Phê duyệt Khóa học</span>
-                </Button>
-              </Link>
-
-              <Link to="/admin/reports">
-                <Button className="w-full h-20 flex flex-col gap-2" variant="outline">
-                  <FileText className="h-6 w-6" />
-                  <span>Báo cáo Thống kê</span>
-                </Button>
-              </Link>
+            <div className="space-y-3">
+              {pendingCourses.length === 0 && (
+                <p className="text-sm text-muted-foreground">Không có khóa học chờ duyệt</p>
+              )}
+              {pendingCourses.map((course) => (
+                <div key={course.id} className="p-3 rounded-lg border border-border">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-foreground">{course.code}</p>
+                      <p className="text-sm text-muted-foreground">{course.name}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        className="text-sm px-3 py-1 rounded-md bg-success/10 text-success"
+                        onClick={async () => {
+                          const { error } = await supabase
+                            .from('courses')
+                            .update({ status: 'approved' })
+                            .eq('id', course.id);
+                          if (!error) {
+                            setPendingCourses((prev) => prev.filter((c) => c.id !== course.id));
+                          }
+                        }}
+                      >
+                        Duyệt
+                      </button>
+                      <button
+                        className="text-sm px-3 py-1 rounded-md bg-destructive/10 text-destructive"
+                        onClick={async () => {
+                          const { error } = await supabase
+                            .from('courses')
+                            .update({ status: 'rejected' })
+                            .eq('id', course.id);
+                          if (!error) {
+                            setPendingCourses((prev) => prev.filter((c) => c.id !== course.id));
+                          }
+                        }}
+                      >
+                        Từ chối
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
-      </motion.div>
 
-      {/* Recent Activities & Pending Requests */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.6 }}
-        >
-          <Card className="shadow-card">
-            <CardHeader>
-              <CardTitle>Yêu cầu chờ xử lý</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 rounded-lg bg-warning/10 border border-warning/20">
-                  <div>
-                    <h3 className="font-medium">20 yêu cầu đổi mật khẩu</h3>
-                    <p className="text-sm text-muted-foreground">Cần xử lý trong ngày</p>
-                  </div>
-                  <Button size="sm">Xử lý</Button>
-                </div>
-
-                <Link to="/admin/approvals">
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-primary/10 border border-primary/20 cursor-pointer hover:bg-primary/15 transition-colors">
-                    <div>
-                      <h3 className="font-medium">Yêu cầu phê duyệt khóa học</h3>
-                      <p className="text-sm text-muted-foreground">Từ giảng viên</p>
+        <Card className="shadow-card">
+          <CardHeader>
+            <CardTitle>Thông báo chờ duyệt</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {pendingAnnouncements.length === 0 && (
+                <p className="text-sm text-muted-foreground">Không có thông báo chờ duyệt</p>
+              )}
+              {pendingAnnouncements.map((announcement) => (
+                <div key={announcement.id} className="p-3 rounded-lg border border-border">
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold text-foreground">{announcement.title}</p>
+                    <div className="flex gap-2">
+                      <button
+                        className="text-sm px-3 py-1 rounded-md bg-success/10 text-success"
+                        onClick={async () => {
+                          const { error } = await supabase
+                            .from('announcements')
+                            .update({ status: 'approved' })
+                            .eq('id', announcement.id);
+                          if (!error) {
+                            setPendingAnnouncements((prev) => prev.filter((a) => a.id !== announcement.id));
+                          }
+                        }}
+                      >
+                        Duyệt
+                      </button>
+                      <button
+                        className="text-sm px-3 py-1 rounded-md bg-destructive/10 text-destructive"
+                        onClick={async () => {
+                          const { error } = await supabase
+                            .from('announcements')
+                            .update({ status: 'rejected' })
+                            .eq('id', announcement.id);
+                          if (!error) {
+                            setPendingAnnouncements((prev) => prev.filter((a) => a.id !== announcement.id));
+                          }
+                        }}
+                      >
+                        Từ chối
+                      </button>
                     </div>
-                    <Button size="sm">Xem</Button>
                   </div>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.7 }}
-        >
-          <Card className="shadow-card">
-            <CardHeader>
-              <CardTitle>Hoạt động Gần đây</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div className="flex items-center gap-3 text-sm">
-                  <div className="h-2 w-2 rounded-full bg-success"></div>
-                  <p className="text-muted-foreground">
-                    <span className="font-medium text-foreground">Admin</span> đã thêm 15 sinh viên mới
-                  </p>
                 </div>
-                <div className="flex items-center gap-3 text-sm">
-                  <div className="h-2 w-2 rounded-full bg-primary"></div>
-                  <p className="text-muted-foreground">
-                    <span className="font-medium text-foreground">Giảng viên Nguyễn A</span> tạo khóa học mới
-                  </p>
-                </div>
-                <div className="flex items-center gap-3 text-sm">
-                  <div className="h-2 w-2 rounded-full bg-warning"></div>
-                  <p className="text-muted-foreground">
-                    <span className="font-medium text-foreground">Hệ thống</span> đã sao lưu dữ liệu
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

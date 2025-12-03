@@ -21,6 +21,7 @@ interface Enrollment {
   course_code?: string;
   student_name?: string;
   student_email?: string;
+  status: string;
 }
 
 const Enrollments = () => {
@@ -139,7 +140,8 @@ const Enrollments = () => {
         .insert([{
           course_id: selectedCourse,
           student_id: selectedStudent,
-          progress: 0
+          progress: 0,
+          status: 'approved'
         }]);
 
       if (error) throw error;
@@ -151,6 +153,21 @@ const Enrollments = () => {
       fetchData();
     } catch (error: any) {
       toast.error(error.message || 'Có lỗi xảy ra');
+    }
+  };
+
+  const handleStatusChange = async (id: string, status: 'approved' | 'rejected') => {
+    try {
+      const { error } = await supabase
+        .from('enrollments')
+        .update({ status })
+        .eq('id', id);
+
+      if (error) throw error;
+      toast.success(status === 'approved' ? 'Đã duyệt ghi danh' : 'Đã từ chối ghi danh');
+      fetchData();
+    } catch (error: any) {
+      toast.error(error.message || 'Không thể cập nhật trạng thái');
     }
   };
 
@@ -271,7 +288,7 @@ const Enrollments = () => {
             >
               <Card className="shadow-card hover:shadow-hover transition-shadow">
                 <CardHeader>
-                  <div className="flex items-start justify-between">
+                  <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
                         <BookOpen className="h-5 w-5 text-primary" />
@@ -285,20 +302,48 @@ const Enrollments = () => {
                         </p>
                         <p>{enrollment.student_email}</p>
                         <p>Ghi danh: {format(new Date(enrollment.enrolled_at), 'dd/MM/yyyy')}</p>
-                        <p>Tiến độ: {enrollment.progress}%</p>
+                        <p>Ti?n ??: {enrollment.progress}%</p>
+                        <span className="inline-flex mt-2 text-xs font-semibold px-2 py-1 rounded-full bg-muted text-muted-foreground">
+                          {enrollment.status === 'pending'
+                            ? '?ang ch? duy?t'
+                            : enrollment.status === 'approved'
+                              ? '?a duy?t'
+                              : '?a t? ch?i'}
+                        </span>
                       </div>
                     </div>
-                    {role === 'admin' && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleUnenroll(enrollment.id)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    )}
+                    <div className="flex flex-col items-end gap-2">
+                      {(role === 'lecturer' || role === 'admin') && enrollment.status === 'pending' && (
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleStatusChange(enrollment.id, 'approved')}
+                          >
+                            Duy?t
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleStatusChange(enrollment.id, 'rejected')}
+                          >
+                            T? ch?i
+                          </Button>
+                        </div>
+                      )}
+                      {(role === 'lecturer' || role === 'admin') && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleUnenroll(enrollment.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </CardHeader>
+
               </Card>
             </motion.div>
           ))}

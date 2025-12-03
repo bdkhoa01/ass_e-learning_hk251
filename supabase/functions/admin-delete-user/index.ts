@@ -15,7 +15,6 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Verify caller is authenticated and has admin role
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -30,7 +29,6 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Check if caller has admin role
     const { data: roleData, error: roleError } = await supabaseClient
       .from('user_roles')
       .select('role')
@@ -39,71 +37,40 @@ Deno.serve(async (req) => {
 
     if (roleError || roleData?.role !== 'admin') {
       return new Response(
-        JSON.stringify({ error: 'Chỉ admin mới có quyền tạo tài khoản' }),
+        JSON.stringify({ error: 'Chỉ admin mới có quyền xóa tài khoản' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Parse request body
-    const { email, password, full_name, role } = await req.json()
-
-    // Validate input
-    if (!email || !password || !full_name || !role) {
+    const { user_id } = await req.json()
+    if (!user_id) {
       return new Response(
-        JSON.stringify({ error: 'Thiếu thông tin bắt buộc' }),
+        JSON.stringify({ error: 'Thiếu user_id' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    if (!['admin', 'lecturer', 'student'].includes(role)) {
-      return new Response(
-        JSON.stringify({ error: 'Vai trò không hợp lệ' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    // Use service role client to create user
     const adminClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // Create auth user
-    const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: { full_name }
-    })
-
-    if (authError) {
+    const { error: deleteError } = await adminClient.auth.admin.deleteUser(user_id)
+    if (deleteError) {
       return new Response(
-        JSON.stringify({ error: authError.message }),
+        JSON.stringify({ error: deleteError.message }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Update role
-    if (authData.user) {
-      const { error: roleUpdateError } = await adminClient
-        .from('user_roles')
-        .update({ role })
-        .eq('user_id', authData.user.id)
-
-      if (roleUpdateError) {
-        console.error('Error updating role:', roleUpdateError)
-        // Don't fail the whole operation, user was created
-      }
-    }
-
     return new Response(
-      JSON.stringify({ success: true, user: authData.user }),
+      JSON.stringify({ success: true }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Đã xảy ra lỗi không xác định'
+    const message = error instanceof Error ? error.message : 'Đã xảy ra lỗi không xác định'
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }

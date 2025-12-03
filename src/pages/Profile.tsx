@@ -1,28 +1,30 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { toast } from 'sonner';
-import { User, Lock, Mail, Calendar } from 'lucide-react';
+import { User, Lock, Mail, Users, Calendar, Phone, Shield, Eye, EyeOff } from 'lucide-react';
 import { z } from 'zod';
 
 const profileSchema = z.object({
   full_name: z.string().min(2, 'Tên phải có ít nhất 2 ký tự').max(100),
   date_of_birth: z.string().optional(),
+  gender: z.string().optional(),
+  phone: z.string().optional(),
 });
 
 const passwordSchema = z.object({
+  currentPassword: z.string().min(1, 'Vui lòng nhập mật khẩu hiện tại'),
   newPassword: z.string()
     .min(8, 'Mật khẩu phải có ít nhất 8 ký tự')
     .regex(/[A-Z]/, 'Phải có ít nhất 1 chữ hoa')
     .regex(/[0-9]/, 'Phải có ít nhất 1 chữ số'),
   confirmPassword: z.string()
 }).refine((data) => data.newPassword === data.confirmPassword, {
-  message: "Mật khẩu xác nhận không khớp",
-  path: ["confirmPassword"],
+  message: 'Mật khẩu xác nhận không khớp',
+  path: ['confirmPassword'],
 });
 
 const Profile = () => {
@@ -31,16 +33,31 @@ const Profile = () => {
   const [formData, setFormData] = useState({
     full_name: profile?.full_name || '',
     date_of_birth: profile?.date_of_birth || '',
+    gender: (profile as any)?.gender || '',
+    phone: (profile as any)?.phone || '',
   });
   const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
     newPassword: '',
-    confirmPassword: ''
+    confirmPassword: '',
+  });
+  const [showPassword, setShowPassword] = useState({
+    current: false,
+    new: false,
+    confirm: false,
   });
   const [errors, setErrors] = useState<any>({});
 
-  const handleProfileUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  useEffect(() => {
+    setFormData({
+      full_name: profile?.full_name || '',
+      date_of_birth: profile?.date_of_birth || '',
+      gender: (profile as any)?.gender || '',
+      phone: (profile as any)?.phone || '',
+    });
+  }, [profile]);
+
+  const handleProfileUpdate = async () => {
     try {
       profileSchema.parse(formData);
       await updateProfile(formData);
@@ -59,11 +76,11 @@ const Profile = () => {
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       passwordSchema.parse(passwordData);
-      await changePassword(passwordData.newPassword);
-      setPasswordData({ newPassword: '', confirmPassword: '' });
+      await changePassword(passwordData.currentPassword, passwordData.newPassword);
+      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
       setErrors({});
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -111,23 +128,26 @@ const Profile = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleProfileUpdate} className="space-y-4">
+              <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="email">Email</Label>
-                    <div className="flex items-center gap-2 mt-1">
+                    <Label className="flex items-center gap-2" htmlFor="email">
                       <Mail className="h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="email"
-                        value={user?.email}
-                        disabled
-                        className="bg-muted"
-                      />
-                    </div>
+                      Email
+                    </Label>
+                    <Input
+                      id="email"
+                      value={user?.email}
+                      disabled
+                      className="bg-muted mt-1"
+                    />
                   </div>
 
                   <div>
-                    <Label htmlFor="role">Vai trò</Label>
+                    <Label className="flex items-center gap-2" htmlFor="role">
+                      <Shield className="h-4 w-4 text-muted-foreground" />
+                      Vai trò
+                    </Label>
                     <Input
                       id="role"
                       value={getRoleLabel(role || '')}
@@ -137,24 +157,48 @@ const Profile = () => {
                   </div>
                 </div>
 
-                <div>
-                  <Label htmlFor="full_name">Họ và tên</Label>
-                  <Input
-                    id="full_name"
-                    value={formData.full_name}
-                    onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                    disabled={!editMode}
-                    className={editMode ? '' : 'bg-muted'}
-                  />
-                  {errors.full_name && (
-                    <p className="text-sm text-destructive mt-1">{errors.full_name}</p>
-                  )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="flex items-center gap-2" htmlFor="full_name">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                      Họ và tên
+                    </Label>
+                    <Input
+                      id="full_name"
+                      value={formData.full_name}
+                      onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                      disabled={!editMode}
+                      className={editMode ? '' : 'bg-muted'}
+                    />
+                    {errors.full_name && (
+                      <p className="text-sm text-destructive mt-1">{errors.full_name}</p>
+                    )}
+                  </div>
+                  <div>
+                    <Label className="flex items-center gap-2" htmlFor="gender">
+                      <Users className="h-4 w-4 text-muted-foreground" />
+                      Giới tính
+                    </Label>
+                    <select
+                      id="gender"
+                      value={formData.gender}
+                      onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                      disabled={!editMode}
+                      className={`w-full rounded-md border border-input bg-background px-3 py-2 text-sm ${editMode ? '' : 'bg-muted'}`}
+                    >
+                      <option value="">Chọn</option>
+                      <option value="Nam">Nam</option>
+                      <option value="Nữ">Nữ</option>
+                    </select>
+                  </div>
                 </div>
 
-                <div>
-                  <Label htmlFor="date_of_birth">Ngày sinh</Label>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="flex items-center gap-2" htmlFor="date_of_birth">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      Ngày sinh
+                    </Label>
                     <Input
                       id="date_of_birth"
                       type="date"
@@ -163,16 +207,31 @@ const Profile = () => {
                       disabled={!editMode}
                       className={editMode ? '' : 'bg-muted'}
                     />
+                    {errors.date_of_birth && (
+                      <p className="text-sm text-destructive mt-1">{errors.date_of_birth}</p>
+                    )}
                   </div>
-                  {errors.date_of_birth && (
-                    <p className="text-sm text-destructive mt-1">{errors.date_of_birth}</p>
-                  )}
+                  <div>
+                    <Label className="flex items-center gap-2" htmlFor="phone">
+                      <Phone className="h-4 w-4 text-muted-foreground" />
+                      Số điện thoại
+                    </Label>
+                    <Input
+                      id="phone"
+                      type="tel"
+                      value={formData.phone}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      disabled={!editMode}
+                      className={editMode ? '' : 'bg-muted'}
+                      placeholder="0123xxxxxx"
+                    />
+                  </div>
                 </div>
 
                 <div className="flex gap-2">
                   {editMode ? (
                     <>
-                      <Button type="submit">Lưu thay đổi</Button>
+                      <Button type="button" onClick={handleProfileUpdate}>Lưu thay đổi</Button>
                       <Button
                         type="button"
                         variant="outline"
@@ -181,6 +240,8 @@ const Profile = () => {
                           setFormData({
                             full_name: profile?.full_name || '',
                             date_of_birth: profile?.date_of_birth || '',
+                            gender: (profile as any)?.gender || '',
+                            phone: (profile as any)?.phone || '',
                           });
                           setErrors({});
                         }}
@@ -206,23 +267,58 @@ const Profile = () => {
           transition={{ delay: 0.2 }}
         >
           <Card className="shadow-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Lock className="h-5 w-5" />
-                Đổi mật khẩu
-              </CardTitle>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Lock className="h-5 w-5" />
+                  Đổi mật khẩu
+                </CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={handlePasswordChange} className="space-y-4">
                 <div>
+                  <Label htmlFor="currentPassword">Mật khẩu hiện tại</Label>
+                  <div className="relative">
+                    <Input
+                      id="currentPassword"
+                      type={showPassword.current ? 'text' : 'password'}
+                      value={passwordData.currentPassword}
+                      onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                      placeholder="Nhập mật khẩu hiện tại"
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => ({ ...prev, current: !prev.current }))}
+                      className="absolute inset-y-0 right-3 flex items-center text-muted-foreground hover:text-foreground"
+                      aria-label={showPassword.current ? 'Ẩn mật khẩu hiện tại' : 'Hiện mật khẩu hiện tại'}
+                    >
+                      {showPassword.current ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  {errors.currentPassword && (
+                    <p className="text-sm text-destructive mt-1">{errors.currentPassword}</p>
+                  )}
+                </div>
+                <div>
                   <Label htmlFor="newPassword">Mật khẩu mới</Label>
-                  <Input
-                    id="newPassword"
-                    type="password"
-                    value={passwordData.newPassword}
-                    onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                    placeholder="Nhập mật khẩu mới"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="newPassword"
+                      type={showPassword.new ? 'text' : 'password'}
+                      value={passwordData.newPassword}
+                      onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                      placeholder="Nhập mật khẩu mới"
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => ({ ...prev, new: !prev.new }))}
+                      className="absolute inset-y-0 right-3 flex items-center text-muted-foreground hover:text-foreground"
+                      aria-label={showPassword.new ? 'Ẩn mật khẩu mới' : 'Hiện mật khẩu mới'}
+                    >
+                      {showPassword.new ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                   {errors.newPassword && (
                     <p className="text-sm text-destructive mt-1">{errors.newPassword}</p>
                   )}
@@ -233,13 +329,24 @@ const Profile = () => {
 
                 <div>
                   <Label htmlFor="confirmPassword">Xác nhận mật khẩu</Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    value={passwordData.confirmPassword}
-                    onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                    placeholder="Nhập lại mật khẩu mới"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="confirmPassword"
+                      type={showPassword.confirm ? 'text' : 'password'}
+                      value={passwordData.confirmPassword}
+                      onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                      placeholder="Nhập lại mật khẩu mới"
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => ({ ...prev, confirm: !prev.confirm }))}
+                      className="absolute inset-y-0 right-3 flex items-center text-muted-foreground hover:text-foreground"
+                      aria-label={showPassword.confirm ? 'Ẩn xác nhận mật khẩu' : 'Hiện xác nhận mật khẩu'}
+                    >
+                      {showPassword.confirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                   {errors.confirmPassword && (
                     <p className="text-sm text-destructive mt-1">{errors.confirmPassword}</p>
                   )}

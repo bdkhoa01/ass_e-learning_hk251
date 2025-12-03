@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { UserPlus } from 'lucide-react';
+import { UserPlus, Eye, EyeOff } from 'lucide-react';
 
 const Admin = () => {
   const [email, setEmail] = useState('');
@@ -16,25 +16,32 @@ const Admin = () => {
   const [role, setRole] = useState<'student' | 'lecturer' | 'admin'>('student');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (password.length < 8) {
-      toast.error('Mật khẩu phải có ít nhất 8 ký tự');
-      return;
-    }
-    
     setLoading(true);
 
     try {
-      // Get current session token
+      const passwordValid =
+        password.length >= 8 &&
+        /[A-Z]/.test(password) &&
+        /[a-z]/.test(password) &&
+        /[0-9]/.test(password);
+
+      if (!passwordValid) {
+        throw new Error('Mật khẩu phải có tối thiểu 8 ký tự, gồm chữ hoa, chữ thường và số');
+      }
+
+      if (!email.toLowerCase().endsWith('@hcmut.edu.vn')) {
+        throw new Error('Email phải thuộc tên miền @hcmut.edu.vn');
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         throw new Error('Bạn cần đăng nhập để thực hiện thao tác này');
       }
 
-      // Call Edge Function to create user
       const { data, error } = await supabase.functions.invoke('admin-create-user', {
         body: { email, password, full_name: fullName, role }
       });
@@ -58,8 +65,8 @@ const Admin = () => {
   return (
     <div className="container py-8 px-4">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-3xl font-bold mb-2">Quản lý Hệ thống</h1>
-        <p className="text-muted-foreground mb-8">Cấp email và quản lý người dùng</p>
+        <h1 className="text-3xl font-bold mb-2">Tạo tài khoản</h1>
+        <p className="text-muted-foreground mb-8">Cấp tài khoản cho người dùng</p>
 
         <Card className="max-w-2xl shadow-card">
           <CardHeader>
@@ -90,12 +97,23 @@ const Admin = () => {
               </div>
               <div className="space-y-2">
                 <Label>Mật khẩu mặc định</Label>
-                <Input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
+                <div className="relative">
+                  <Input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute inset-y-0 right-3 flex items-center text-muted-foreground hover:text-foreground"
+                    aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>Vai trò</Label>
