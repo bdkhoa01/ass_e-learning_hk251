@@ -3,7 +3,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronUp, User, ExternalLink } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { ChevronDown, ChevronUp, User, ExternalLink, Save } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface Submission {
   id: string;
@@ -17,18 +20,27 @@ interface Submission {
 
 interface SubmissionsListProps {
   assignmentId: string;
+  maxScore: number;
 }
 
-const SubmissionsList = ({ assignmentId }: SubmissionsListProps) => {
+const SubmissionsList = ({ assignmentId, maxScore }: SubmissionsListProps) => {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [gradeScore, setGradeScore] = useState<string>('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetchSubmissions();
   }, [assignmentId]);
+
+  useEffect(() => {
+    if (selectedSubmission) {
+      setGradeScore(selectedSubmission.score?.toString() || '');
+    }
+  }, [selectedSubmission]);
 
   const fetchSubmissions = async () => {
     try {
@@ -61,6 +73,37 @@ const SubmissionsList = ({ assignmentId }: SubmissionsListProps) => {
       console.error('Error fetching submissions:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveGrade = async () => {
+    if (!selectedSubmission) return;
+    
+    const scoreNum = parseFloat(gradeScore);
+    if (isNaN(scoreNum) || scoreNum < 0 || scoreNum > maxScore) {
+      toast.error(`Điểm phải từ 0 đến ${maxScore}`);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('submissions')
+        .update({ 
+          score: scoreNum,
+          graded_at: new Date().toISOString()
+        })
+        .eq('id', selectedSubmission.id);
+
+      if (error) throw error;
+
+      toast.success('Chấm điểm thành công');
+      setSelectedSubmission({ ...selectedSubmission, score: scoreNum });
+      fetchSubmissions();
+    } catch (error: any) {
+      toast.error(error.message || 'Có lỗi xảy ra');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -100,6 +143,11 @@ const SubmissionsList = ({ assignmentId }: SubmissionsListProps) => {
             >
               <User className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm flex-1">{submission.student_name}</span>
+              {submission.score !== null && (
+                <span className="text-xs font-medium text-primary">
+                  {submission.score}/{maxScore}
+                </span>
+              )}
               <span className="text-xs text-muted-foreground">
                 {formatDate(submission.submitted_at)}
               </span>
@@ -141,12 +189,26 @@ const SubmissionsList = ({ assignmentId }: SubmissionsListProps) => {
                   {selectedSubmission.content || 'Không có ghi chú'}
                 </p>
               </div>
-              {selectedSubmission.score !== null && (
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Điểm</label>
-                  <p className="text-sm font-medium">{selectedSubmission.score}</p>
+              <div className="pt-4 border-t">
+                <Label htmlFor="grade-score">Chấm điểm (tối đa: {maxScore})</Label>
+                <div className="flex gap-2 mt-2">
+                  <Input
+                    id="grade-score"
+                    type="number"
+                    min="0"
+                    max={maxScore}
+                    step="0.5"
+                    value={gradeScore}
+                    onChange={(e) => setGradeScore(e.target.value)}
+                    placeholder={`0 - ${maxScore}`}
+                    className="flex-1"
+                  />
+                  <Button onClick={handleSaveGrade} disabled={saving}>
+                    <Save className="h-4 w-4 mr-2" />
+                    {saving ? 'Đang lưu...' : 'Lưu điểm'}
+                  </Button>
                 </div>
-              )}
+              </div>
             </div>
           )}
         </DialogContent>
